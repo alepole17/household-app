@@ -216,8 +216,9 @@ body.locked > header, body.locked > main{display:none}
 .gcard .err{font-size:13.5px;color:var(--red);min-height:19px;margin:2px 0 8px}
 .peek{font-size:13px;color:var(--blue);padding:4px 8px;margin:-4px 0 8px}
 .gcard .gnote{font-size:12.5px;color:var(--label-3);margin-top:16px;line-height:1.45}
-.gbtn{width:100%;padding:13px;border-radius:12px;background:var(--blue);color:#fff;font-size:16px;font-weight:530;margin-bottom:9px}
+.gbtn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;background:var(--blue);color:#fff;font-size:16px;font-weight:530;margin-bottom:9px}
 .gbtn.alt{background:var(--card);color:var(--blue);font-weight:500}
+.gbtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .gbtn:active{opacity:.75}
 a{color:var(--blue);text-decoration:none}
 @media(max-width:400px){ .bal .n{font-size:38px} .two{grid-template-columns:1fr} }
@@ -330,6 +331,7 @@ const SUB = (typeof crypto!=="undefined" && crypto.subtle) ? crypto.subtle : nul
 const ITER = 210000;
 let CK = null;            // active data key
 let gateNext = null;      // continuation for the "who is using" step
+let bioTried = false;     // first biometric attempt is automatic, so stay quiet if it is refused
 let lastHidden = 0;
 
 const b64 = b => btoa(String.fromCharCode.apply(null, new Uint8Array(b)));
@@ -551,16 +553,16 @@ function whoScreen(next){
 /* offer Face ID / Touch ID */
 async function bioScreen(next){
   const a = readAuth()||{};
-  if(a.credId || !(await bioAvailable()) || localStorage.getItem("hh_bio_asked")==="1") return next();
+  if(a.credId || !(await bioAvailable()) || (Number(localStorage.getItem("hh_bio_asked")||0) > Date.now()-7*864e5)) return next();
   showGate(gateHTML(`
     <p class="gsub">Open Household with Face ID or Touch ID instead of typing your passcode each time.</p>
     <div class="gicon" style="background:var(--card);color:var(--blue);margin-top:4px">${ICON.face}</div>
     <button class="gbtn" id="bYes">Turn on Face ID or Touch ID</button>
     <button class="gbtn alt" id="bNo">Not now</button>
     <p class="gnote">Your passcode still works, and this keeps a copy of the key on this device so it can open without typing.</p>`));
-  document.getElementById("bNo").onclick = () => { localStorage.setItem("hh_bio_asked","1"); next(); };
+  document.getElementById("bNo").onclick = () => { localStorage.setItem("hh_bio_asked", String(Date.now())); next(); };
   document.getElementById("bYes").onclick = async () => {
-    try{ await bioEnable(); localStorage.setItem("hh_bio_asked","1"); toast("Face ID is on."); }
+    try{ await bioEnable(); localStorage.setItem("hh_bio_asked", String(Date.now())); toast("Face ID is on."); }
     catch(e){ toast("That did not work — your passcode still opens it."); }
     next();
   };
@@ -579,13 +581,22 @@ async function lockScreen(){
   const a = readAuth();
   const canBio = a.credId && await bioAvailable();
   showGate(gateHTML(`
-    <p class="gsub">Enter your passcode to continue.</p>
-    <input type="password" id="g1" placeholder="Passcode" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
-    <button class="peek" id="gPeek">Show passcode</button>
+    <p class="gsub">${canBio?"Unlock to continue.":"Enter your passcode to continue."}</p>
+    ${canBio?`<button class="gbtn" id="gBio">${ICON.face}Unlock with Face ID</button>`:""}
     <div class="err" id="gErr"></div>
-    <button class="gbtn" id="gGo">Unlock</button>
-    ${canBio?`<button class="gbtn alt" id="gBio">Unlock with Face ID or Touch ID</button>`:""}`));
+    <div id="passWrap"${canBio?' style="display:none"':''}>
+      <input type="password" id="g1" placeholder="Passcode" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+      <button class="peek" id="gPeek">Show passcode</button>
+      <button class="gbtn${canBio?" alt":""}" id="gGo">Unlock</button>
+    </div>
+    ${canBio?`<button class="gbtn alt" id="gPass">Use passcode instead</button>`:""}`));
   const input = document.getElementById("g1");
+  const passBtn = document.getElementById("gPass");
+  if(passBtn) passBtn.onclick = () => {
+    document.getElementById("passWrap").style.display = "";
+    passBtn.style.display = "none";
+    setTimeout(()=>{ try{ input.focus(); }catch(e){} }, 60);
+  };
   input.onkeydown = e => { if(e.key==="Enter") document.getElementById("gGo").click(); };
   const peek = document.getElementById("gPeek");
   if(peek) peek.onclick = () => {
@@ -610,9 +621,14 @@ async function lockScreen(){
       const raw = localStorage.getItem(BIO_KEY);
       if(SUB && raw) CK = await SUB.importKey("raw", unb64(raw), {name:"AES-GCM"}, true, ["encrypt","decrypt"]);
       await readData(); afterUnlock();
-    }catch(e){ gateErr("Face ID or Touch ID did not work. Use your passcode."); }
+    }catch(e){ gateErr(bioTried ? "That did not work. Use your passcode instead." : ""); bioTried = true; }
   };
-  setTimeout(()=>{ try{ input.focus(); }catch(e){} }, 350);
+  if(canBio){
+    // try straight away; Safari may require a tap, in which case the button is right there
+    setTimeout(()=>{ try{ document.getElementById("gBio").click(); }catch(e){} }, 120);
+  } else {
+    setTimeout(()=>{ try{ input.focus(); }catch(e){} }, 350);
+  }
 }
 
 function lockNow(){ CK = null; closeSheet(); lockScreen(); }
