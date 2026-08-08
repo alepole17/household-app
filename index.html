@@ -163,6 +163,8 @@ button.li:active{background:var(--fill)}
 .f textarea{min-height:64px;resize:vertical}
 .f .h{font-size:12.5px;color:var(--label-2);margin:5px 4px 0}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two > *{min-width:0}
+.f input[type=date]{min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;height:44px}
 .btn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;font-size:16px;font-weight:500;padding:13px;border-radius:11px;background:var(--card);color:var(--blue);margin-bottom:9px}
 .btn.pri{background:var(--blue);color:#fff;font-weight:530}
 .btn.des{color:var(--red)}
@@ -221,7 +223,8 @@ body.locked > header, body.locked > main{display:none}
 .gbtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .gbtn:active{opacity:.75}
 a{color:var(--blue);text-decoration:none}
-@media(max-width:400px){ .bal .n{font-size:38px} .two{grid-template-columns:1fr} }
+@media(max-width:400px){ .bal .n{font-size:38px} }
+@media(max-width:520px){ .two{grid-template-columns:1fr} }
 </style>
 </head>
 <body class="locked">
@@ -980,6 +983,53 @@ async function hashFile(f){
     return [...new Uint8Array(d)].slice(0,8).map(x=>x.toString(16).padStart(2,"0")).join("");
   }catch(e){ return f.name+"-"+f.size; }
 }
+/* ------------------------------------------------- reading screenshots */
+/* Text recognition is fetched on first use, so it costs nothing until an
+   image is actually dropped in. If the network or the host blocks it, every
+   caller falls back to the copy-and-paste route.                          */
+const TESS = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+let _tess = null;
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(_tess) return _tess;
+  _tess = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = TESS;
+    s.onload = () => window.Tesseract ? res(window.Tesseract) : rej(new Error("unavailable"));
+    s.onerror = () => rej(new Error("blocked"));
+    document.head.appendChild(s);
+    setTimeout(() => rej(new Error("timeout")), 40000);
+  });
+  return _tess;
+}
+function isImage(f){ return f && /^image\//.test(f.type||""); }
+async function ocrImage(file, onProgress){
+  const T = await loadTesseract();
+  const worker = await T.createWorker("eng", 1, {
+    workerPath:"https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
+    corePath:"https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1/",
+    logger: m => { if(onProgress && m && m.status==="recognizing text") onProgress(Math.round((m.progress||0)*100)); }
+  });
+  try{
+    const r = await worker.recognize(file);
+    return (r && r.data && r.data.text) || "";
+  } finally { try{ await worker.terminate(); }catch(e){} }
+}
+/* returns whatever text we can get for a file: pasted wins, then OCR */
+async function textFor(file, pasted, onStatus){
+  if(pasted && pasted.trim()) return pasted;
+  if(!isImage(file)) return "";
+  try{
+    if(onStatus) onStatus("Reading the image…");
+    const t = await ocrImage(file, p => onStatus && onStatus("Reading the image… "+p+"%"));
+    if(onStatus) onStatus("");
+    return t || "";
+  }catch(e){
+    if(onStatus) onStatus("could-not-read");
+    return "";
+  }
+}
+
 async function buildCandidate(file, text){
   const hay = (file.name+" "+(text||"")).toLowerCase();
   const rule = guessProvider(hay);
@@ -1043,7 +1093,8 @@ function vUpload(){
   <div class="f">
     <label>Paste what the document says</label>
     <textarea id="pasteText" placeholder="Virgin Media · 3 Aug – 2 Sep 2026 · £29.49 · due 12 Aug"></textarea>
-    <div class="h">Optional, but it makes the match far more accurate. Without it the file goes to Needs review.</div>
+    <div class="h">Open the screenshot in Photos, press and hold the text, Select All, Copy — then tap Paste below. Without any text the file goes to Needs review.</div>
+    <button class="btn" id="uPaste" style="margin-top:8px">Paste copied text</button>
   </div>
 
   ${reviewQueue.length?`<div class="ghead">Review · ${reviewQueue.length}</div>
@@ -1087,6 +1138,15 @@ function candHTML(c){
   </div>`;
 }
 function wireUpload(){
+  const up = document.getElementById("uPaste");
+  if(up) up.onclick = async () => {
+    try{
+      const txt = await navigator.clipboard.readText();
+      if(!txt || !txt.trim()){ toast("Nothing copied yet."); return; }
+      document.getElementById("pasteText").value = txt;
+      toast("Pasted. Now choose the file it belongs to.");
+    }catch(e){ toast("Could not read the clipboard — paste into the box instead."); }
+  };
   const drop=document.getElementById("drop"), input=document.getElementById("fileInput")||(()=>{
     const i=document.createElement("input"); i.type="file"; i.multiple=true; i.id="fileInput"; i.hidden=true;
     i.accept="image/*,application/pdf,.pdf,.png,.jpg,.jpeg,.heic,.txt"; document.body.appendChild(i); return i;})();
@@ -1103,7 +1163,8 @@ async function handleFiles(files){
   const blocks = text.split(/\n\s*\n/).filter(b=>b.trim().length);
   const list = [...files];
   for(let i=0;i<list.length;i++){
-    const t = (list.length>1 && blocks.length===list.length) ? blocks[i] : text;
+    let t = (list.length>1 && blocks.length===list.length) ? blocks[i] : text;
+    t = await textFor(list[i], t, s => { if(s && s!=="could-not-read") toast(s); });
     reviewQueue.push(await buildCandidate(list[i], t));
   }
   if(list.length===1 && blocks.length>1){
@@ -1266,7 +1327,7 @@ function fillFromCandidate(c){
     box.innerHTML = filled.length
       ? `Read from <b>${esc(c.fileName||"the text")}</b> — filled in ${filled.join(", ")}. Check the fields below and correct anything that looks off.`
         + (warn?`<br><br>${c.checks.reasons.map(esc).join("<br>")}`:"")
-      : `Nothing could be read automatically from <b>${esc(c.fileName||"the text")}</b>. Fill the fields in below.`;
+      : `Nothing readable in <b>${esc(c.fileName||"that file")}</b>. Screenshots are pictures, so copy the text off it in Photos and tap Paste copied text — or just fill the fields in below.`;
   }
   const nm = document.getElementById("attName");
   if(nm && c.fileName) nm.textContent = c.fileName;
@@ -1281,8 +1342,10 @@ function formSheet(o){
     ${isNew?`<div class="att" id="attBox">
       <button class="row" id="attachBtn"><span class="ic">${ICON.doc}</span>
         <span class="tx"><span class="t1">Attach a bill or screenshot</span><span class="t2" id="attName">Fills in what it can read</span></span></button>
+      <button class="row" id="pasteBtn"><span class="ic">${ICON.down}</span>
+        <span class="tx"><span class="t1">Paste copied text</span><span class="t2">Copy it off the screenshot in Photos first</span></span></button>
       <button class="row" id="readTextBtn"><span class="ic">${ICON.info}</span>
-        <span class="tx"><span class="t1">Autofill from pasted text</span><span class="t2">Paste below, then tap</span></span></button>
+        <span class="tx"><span class="t1">Autofill from pasted text</span><span class="t2">Reads the box below</span></span></button>
       <div class="info" id="attInfo" style="display:none"></div>
     </div>
     <div class="f"><label>Text from the document</label><textarea id="attText" placeholder="Virgin Media · 3 Aug – 2 Sep 2026 · £29.49"></textarea></div>`:""}
@@ -1317,12 +1380,29 @@ function formSheet(o){
     document.body.appendChild(fi);
     fi.onchange = async ev => {
       if(!ev.target.files.length) return;
-      const txt = (document.getElementById("attText")||{}).value||"";
-      attached = await buildCandidate(ev.target.files[0], txt);
-      document.getElementById("attInfo").style.display = "";
+      const f = ev.target.files[0];
+      const box = document.getElementById("attInfo");
+      box.style.display = ""; box.className = "info";
+      let failed = false;
+      const txt = await textFor(f, (document.getElementById("attText")||{}).value||"",
+        s => { if(s==="could-not-read"){ failed = true; return; }
+               if(s) box.innerHTML = s + " This can take a few seconds."; });
+      const ta = document.getElementById("attText");
+      if(ta && txt && !ta.value.trim()) ta.value = txt.trim();
+      attached = await buildCandidate(f, txt);
       fillFromCandidate(attached);
+      if(failed) box.innerHTML = "Could not read <b>"+esc(f.name)+"</b> automatically. Copy the text off it in Photos and tap Paste copied text, or fill the fields in below.";
     };
     document.getElementById("attachBtn").onclick = () => fi.click();
+    const pb = document.getElementById("pasteBtn");
+    if(pb) pb.onclick = async () => {
+      try{
+        const txt = await navigator.clipboard.readText();
+        if(!txt || !txt.trim()){ toast("Nothing copied yet."); return; }
+        document.getElementById("attText").value = txt;
+        document.getElementById("readTextBtn").click();
+      }catch(e){ toast("Could not read the clipboard — paste into the box below instead."); }
+    };
     document.getElementById("readTextBtn").onclick = async () => {
       const txt = (document.getElementById("attText")||{}).value||"";
       if(!txt.trim()){ toast("Paste some text first."); return; }
