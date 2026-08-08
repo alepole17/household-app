@@ -214,6 +214,7 @@ body.locked > header, body.locked > main{display:none}
   font-size:17px;letter-spacing:.06em;margin-bottom:10px;outline:2px solid transparent;transition:outline-color .15s}
 .gcard input:focus{outline-color:var(--blue)}
 .gcard .err{font-size:13.5px;color:var(--red);min-height:19px;margin:2px 0 8px}
+.peek{font-size:13px;color:var(--blue);padding:4px 8px;margin:-4px 0 8px}
 .gcard .gnote{font-size:12.5px;color:var(--label-3);margin-top:16px;line-height:1.45}
 .gbtn{width:100%;padding:13px;border-radius:12px;background:var(--blue);color:#fff;font-size:16px;font-weight:530;margin-bottom:9px}
 .gbtn.alt{background:var(--card);color:var(--blue);font-weight:500}
@@ -505,8 +506,8 @@ function gateErr(msg){ const e = document.getElementById("gErr"); if(e) e.textCo
 function setupScreen(){
   showGate(gateHTML(`
     <p class="gsub">Choose a passcode. You will need it every time this opens${SUB?", and it encrypts everything stored on this device":""}.</p>
-    <input type="password" id="g1" placeholder="New passcode" autocomplete="new-password">
-    <input type="password" id="g2" placeholder="Repeat passcode" autocomplete="new-password">
+    <input type="password" id="g1" placeholder="New passcode" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <input type="password" id="g2" placeholder="Repeat passcode" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
     <div class="err" id="gErr"></div>
     <button class="gbtn" id="gSet">Set passcode</button>
     <button class="gbtn alt" id="gJoin">Join a shared ledger</button>
@@ -579,12 +580,19 @@ async function lockScreen(){
   const canBio = a.credId && await bioAvailable();
   showGate(gateHTML(`
     <p class="gsub">Enter your passcode to continue.</p>
-    <input type="password" id="g1" placeholder="Passcode" autocomplete="current-password">
+    <input type="password" id="g1" placeholder="Passcode" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <button class="peek" id="gPeek">Show passcode</button>
     <div class="err" id="gErr"></div>
     <button class="gbtn" id="gGo">Unlock</button>
     ${canBio?`<button class="gbtn alt" id="gBio">Unlock with Face ID or Touch ID</button>`:""}`));
   const input = document.getElementById("g1");
   input.onkeydown = e => { if(e.key==="Enter") document.getElementById("gGo").click(); };
+  const peek = document.getElementById("gPeek");
+  if(peek) peek.onclick = () => {
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    peek.textContent = show ? "Hide passcode" : "Show passcode";
+  };
   document.getElementById("gGo").onclick = async () => {
     const pass = input.value; gateErr("");
     try{
