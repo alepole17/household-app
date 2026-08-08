@@ -387,6 +387,16 @@ async function bioAvailable(){
   try{ return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
   catch(e){ return false; }
 }
+/* why it is unavailable, so the message can say something true */
+async function bioReason(){
+  if(!window.isSecureContext) return "This needs to be opened on an https address.";
+  if(!window.PublicKeyCredential) return "This browser does not support Face ID unlock. Try Safari, and not a private tab.";
+  try{
+    if(!(await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()))
+      return "Safari cannot reach Face ID or Touch ID here. Try opening the site in a normal Safari tab rather than the home screen icon, and check Face ID is set up on the device.";
+  }catch(e){ return "This browser blocked the Face ID check. A private tab will do that."; }
+  return "";
+}
 async function bioRegister(){
   const c = await navigator.credentials.create({ publicKey:{
     challenge: rand(32), rp:{ name:"Household" },
@@ -563,13 +573,14 @@ async function bioScreen(next){
   document.getElementById("bNo").onclick = () => { localStorage.setItem("hh_bio_asked", String(Date.now())); next(); };
   document.getElementById("bYes").onclick = async () => {
     try{ await bioEnable(); localStorage.setItem("hh_bio_asked", String(Date.now())); toast("Face ID is on."); }
-    catch(e){ toast("That did not work — your passcode still opens it."); }
+    catch(e){ toast("Could not set it up: "+(e && e.name ? e.name : "unknown")+". Your passcode still works."); }
     next();
   };
 }
 
 function enterApp(){
   hideGate(); render();
+  bioReason().then(r => { if(window.__bioWhy !== r){ window.__bioWhy = r; if(tab==="settings") render(); } });
   if(syncCfg()) syncNow();
 }
 function afterUnlock(){
@@ -862,7 +873,7 @@ function byDate(a,b){ return (b.date||"").localeCompare(a.date||""); }
 
 /* ---------------------------------------------------------- settings */
 function vSettings(){
-  const m = monthly(), a = readAuth()||{}, bioOn = !!a.credId, sc = syncCfg();
+  const m = monthly(), a = readAuth()||{}, bioOn = !!a.credId, sc = syncCfg(), bioWhy = window.__bioWhy||"";
   return `
   <div class="ghead">Split</div>
   <div class="grp">
@@ -895,7 +906,7 @@ function vSettings(){
   <div class="ghead">Security</div>
   <div class="grp">
     ${liNav("lock","t-grey","Change passcode","",'','data-sec="change"')}
-    ${liNav("face","t-grey","Face ID or Touch ID", bioOn?"On for this device":"Off", bioOn?"On":"Off",'data-sec="bio"')}
+    ${liNav("face","t-grey","Face ID or Touch ID", bioOn?"On for this device":(bioWhy||"Off"), bioOn?"On":"Off",'data-sec="bio"')}
     ${liNav("lock","t-grey","Lock now","",'','data-sec="lock"')}
   </div>
   <p class="gfoot">${SUB
@@ -1408,9 +1419,9 @@ async function securityAction(what){
       if(!confirm("Turn this off? You will need your passcode each time.")) return;
       bioDisable(); render(); toast("Turned off."); return;
     }
-    if(!(await bioAvailable())) return toast("Not available here — this needs an https address.");
+    if(!(await bioAvailable())) return toast(await bioReason());
     try{ await bioEnable(); render(); toast("Turned on."); }
-    catch(e){ toast("That could not be set up here."); }
+    catch(e){ toast("Could not set it up: "+(e && e.name ? e.name : "unknown")+". Your passcode still works."); }
     return;
   }
   if(what==="change"){
