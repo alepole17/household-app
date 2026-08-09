@@ -56,6 +56,12 @@ header{position:sticky;top:0;z-index:40;background:#f2f2f7e6;backdrop-filter:sat
   color:#fff;font-size:13px;font-weight:600;letter-spacing:0;transition:transform .12s}
 .who:active{transform:scale(.92)}
 .who.ale{background:var(--blue)} .who.amira{background:var(--teal)}
+.iconbtn{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none;
+  background:var(--fill);color:var(--label-2);transition:transform .12s,background .2s,color .2s}
+.iconbtn:active{transform:scale(.92)}
+.iconbtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.iconbtn.on{background:var(--blue);color:#fff}
+body.blurred .amt{filter:blur(6px);user-select:none}
 .segwrap{padding-bottom:12px}
 .seg{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;background:var(--fill);padding:2px;border-radius:9px}
 .seg button{white-space:nowrap;font-size:13px;font-weight:500;color:var(--label);padding:6px 4px;border-radius:7px;
@@ -232,7 +238,7 @@ a{color:var(--blue);text-decoration:none}
 <header>
   <div class="wrap">
     <div class="hrow"><h1>Household</h1>
-      <span class="hright"><span id="upd">—</span><button class="who" id="whoBtn"></button></span></div>
+      <span class="hright"><span id="upd">—</span><button class="iconbtn" id="blurBtn" title="Blur amounts"></button><button class="who" id="whoBtn"></button></span></div>
     <div class="segwrap"><div class="seg" role="tablist" id="seg"></div></div>
   </div>
 </header>
@@ -262,7 +268,9 @@ const ICON = {
   info: S('<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"/><path d="M12 11v5M12 8h.01"/>'),
   gear: S('<path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="m19.4 14-.9 1.6.9 1.6-1.9 1.9-1.6-.9-1.6.9-.7 1.9h-2.6l-.7-1.9-1.6-.9-1.6.9L3.2 17l.9-1.6L3.2 14v-2.6l1.9-.7.9-1.6-.9-1.6L7 5.6l1.6.9 1.6-.9.7-1.9h2.6l.7 1.9 1.6.9 1.6-.9 1.9 1.9-.9 1.6.9 1.6v2.4Z"/>'),
   lock: S('<rect x="4.5" y="10.5" width="15" height="10" rx="2.4"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>'),
-  face: S('<path d="M4 8.5V6a2 2 0 0 1 2-2h2.5M15.5 4H18a2 2 0 0 1 2 2v2.5M20 15.5V18a2 2 0 0 1-2 2h-2.5M8.5 20H6a2 2 0 0 1-2-2v-2.5"/><path d="M9 10v1.5M15 10v1.5M9.5 15.5a3.5 3.5 0 0 0 5 0"/>')
+  face: S('<path d="M4 8.5V6a2 2 0 0 1 2-2h2.5M15.5 4H18a2 2 0 0 1 2 2v2.5M20 15.5V18a2 2 0 0 1-2 2h-2.5M8.5 20H6a2 2 0 0 1-2-2v-2.5"/><path d="M9 10v1.5M15 10v1.5M9.5 15.5a3.5 3.5 0 0 0 5 0"/>'),
+  eye: S('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff: S('<path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M6.6 6.6C4 8.3 2 12 2 12s3.5 7 10 7c1.9 0 3.5-.5 4.9-1.2M17.4 17.4C19.4 16 21 12 21 12s-1-2-2.7-3.7"/>')
 };
 const CHEV = '<svg class="chev" viewBox="0 0 24 24"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></svg>';
 
@@ -426,6 +434,11 @@ function bioDisable(){ const a = readAuth(); if(a){ delete a.credId; writeAuth(a
 const ME_KEY = "hh_me_v1";
 function me(){ return localStorage.getItem(ME_KEY) || ""; }
 function setMe(name){ localStorage.setItem(ME_KEY, name); }
+
+/* --------------------------------------------- privacy blur (device-local) */
+const BLUR_KEY = "hh_blur_v1";
+function blurOn(){ return localStorage.getItem(BLUR_KEY) === "1"; }
+function setBlur(on){ localStorage.setItem(BLUR_KEY, on ? "1" : "0"); }
 
 /* ------------------------------------------------------ shared sync */
 /* The repo only ever receives ciphertext. Both phones derive the same key
@@ -661,8 +674,8 @@ function uid(p){ return (p||"i")+"-"+Date.now().toString(36)+"-"+Math.random().t
 
 /* ----------------------------------------------------------- helpers */
 const round2 = n => Math.round((Number(n)||0)*100)/100;
-const gbp = n => "£"+Math.abs(round2(n)).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
-const gbpS = n => (n<0?"−":"")+gbp(n);
+const gbp = n => `<span class="amt">£${Math.abs(round2(n)).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`;
+const gbpS = n => `<span class="amt">${n<0?"−":""}£${Math.abs(round2(n)).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`;
 function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso+"T00:00:00");
   return isNaN(d)?iso:d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}); }
 function fmtShort(iso){ if(!iso) return "—"; const d=new Date(iso+"T00:00:00");
@@ -687,9 +700,9 @@ function art(it){
 /* ------------------------------------------------------ calculations */
 function calc(){
   const c = state.items.filter(i=>i.status==="counted");
-  const aleBills   = c.filter(i=>i.type==="provider_bill"&&i.paidBy==="Ale").reduce((s,i)=>s+Number(i.amount||0),0);
-  const amiraBills = c.filter(i=>i.type==="provider_bill"&&i.paidBy==="Amira").reduce((s,i)=>s+Number(i.amount||0),0);
-  const payments   = c.filter(i=>i.type==="housemate_payment").reduce((s,i)=>s+(i.paidBy==="Ale"?-Number(i.amount||0):Number(i.amount||0)),0);
+  const aleBills   = c.filter(i=>i.type==="provider_bill"&&i.paidBy==="Ale").reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const amiraBills = c.filter(i=>i.type==="provider_bill"&&i.paidBy==="Amira").reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const payments   = c.filter(i=>i.type==="housemate_payment").reduce((s,i)=>s+(i.paidBy==="Ale"?-(Number(i.amount)||0):(Number(i.amount)||0)),0);
   const share = (state.assumptions.splitAle||50)/100;
   const expected = aleBills*share - amiraBills*share;
   return { aleBills:round2(aleBills), amiraBills:round2(amiraBills), payments:round2(payments),
@@ -726,6 +739,11 @@ function render(){
   wb.textContent = (me()||"?").slice(0,1);
   wb.className = "who " + (me()==="Ale" ? "ale" : me()==="Amira" ? "amira" : "");
   wb.title = me() ? "Signed in as "+me() : "Choose who is using this";
+  const bb = document.getElementById("blurBtn"), on = blurOn();
+  document.body.classList.toggle("blurred", on);
+  bb.className = "iconbtn" + (on ? " on" : "");
+  bb.innerHTML = ICON[on ? "eyeOff" : "eye"];
+  bb.title = on ? "Show amounts" : "Blur amounts";
   document.getElementById("seg").innerHTML = TABS.map(t=>
     `<button role="tab" aria-selected="${t.id===tab}" data-tab="${t.id}">${t.label}</button>`).join("");
   const v = document.getElementById("view");
@@ -811,7 +829,7 @@ function vBills(){
   const bills = state.items.filter(i=>i.type==="provider_bill"||(i.type==="pending"&&i.provider!=="House order"));
   const provs = [...new Set(bills.map(i=>i.provider))].map(p=>{
     const rows = bills.filter(i=>i.provider===p);
-    const total = rows.filter(i=>i.status==="counted").reduce((s,i)=>s+Number(i.amount||0),0);
+    const total = rows.filter(i=>i.status==="counted").reduce((s,i)=>s+(Number(i.amount)||0),0);
     const agg = rows.find(i=>i.opening);
     return { p, total:round2(total), payer:(rows[0]||{}).paidBy, agg, n:rows.length };
   }).sort((a,b)=>b.total-a.total);
@@ -839,7 +857,7 @@ function vBills(){
 function vPayments(){
   const list = state.items.filter(i=>i.type==="housemate_payment");
   const net = list.filter(i=>i.status==="counted")
-    .reduce((s,i)=>s+(i.paidBy==="Ale"?-Number(i.amount||0):Number(i.amount||0)),0);
+    .reduce((s,i)=>s+(i.paidBy==="Ale"?-(Number(i.amount)||0):(Number(i.amount)||0)),0);
   return `
   <div class="big">
     <div class="n">${gbp(net)}</div>
@@ -915,6 +933,12 @@ function vSettings(){
     ? "Everything is encrypted on this device with your passcode."+(bioOn?" Face ID or Touch ID keeps a copy of the key on this device so it can open without typing.":"")
     : "This view cannot encrypt data, so the passcode locks the screen only."}</p>
 
+  <div class="ghead">Privacy</div>
+  <div class="grp">
+    ${liNav(blurOn()?"eyeOff":"eye","t-grey","Blur amounts", blurOn()?"On":"Off", blurOn()?"On":"Off",'data-blur')}
+  </div>
+  <p class="gfoot">Blurs every money figure on screen. Set per device — this phone, your Mac and Amira's phone each remember their own choice.</p>
+
   <div class="ghead">Data</div>
   <div class="grp">
     ${liNav("up","t-grey","Export a backup","Unencrypted file — keep it somewhere safe","",'id="exportBtn"')}
@@ -946,8 +970,14 @@ function parseAmount(t){
   if(!t) return null;
   const lab = t.match(/(?:total|amount|paid|due|balance|payment)[^0-9£]{0,20}£?\s?(\d{1,3}(?:,\d{3})*\.\d{2})/i);
   if(lab) return Number(lab[1].replace(/,/g,""));
-  const all = [...t.matchAll(/£\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g)].map(m=>Number(m[1].replace(/,/g,"")));
-  if(all.length) return all.sort((a,b)=>b-a)[0];
+  const all = [...t.matchAll(/£\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g)].map(m=>m[1].replace(/,/g,""));
+  if(all.length){
+    /* A match with an explicit decimal is preferred over one without, even if the
+       decimal-less number is larger — OCR/paste that drops a decimal point turns
+       "£123.45" into "£12345", which would otherwise win purely on size. */
+    const dec = all.filter(s=>s.includes("."));
+    return Number((dec.length?dec:all).sort((a,b)=>Number(b)-Number(a))[0]);
+  }
   const bare = t.match(/\b(\d{1,4}\.\d{2})\b/); return bare?Number(bare[1]):null;
 }
 const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11};
@@ -1240,7 +1270,7 @@ function explainSheet(which){
 
 function provSheet(name){
   const rows = state.items.filter(i=>i.provider===name).sort(byDate);
-  const total = rows.filter(i=>i.status==="counted").reduce((s,i)=>s+Number(i.amount||0),0);
+  const total = rows.filter(i=>i.status==="counted").reduce((s,i)=>s+(Number(i.amount)||0),0);
   openSheet(`<h3>${esc(name)}</h3><p class="lead">${gbp(total)} counted · ${rows.length} entries</p>
     <div class="grp">${rows.map(i=>liItem(i)).join("")}</div>
     <button class="btn qui" data-close>Done</button>`);
@@ -1537,9 +1567,12 @@ async function securityAction(what){
 
 /* ------------------------------------------------------------ events */
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-tab],[data-explain],[data-item],[data-prov],[data-filter],[data-add],[data-pick],[data-close],[data-edit],[data-status],[data-del],[data-act],[data-showall],[data-assume],[data-sec],[data-sync],[data-who],#whoBtn,#exportBtn,#importBtn,#resetBtn,#sheetBtn");
+  const t = e.target.closest("[data-tab],[data-explain],[data-item],[data-prov],[data-filter],[data-add],[data-pick],[data-close],[data-edit],[data-status],[data-del],[data-act],[data-showall],[data-assume],[data-sec],[data-sync],[data-who],[data-blur],#whoBtn,#blurBtn,#exportBtn,#importBtn,#resetBtn,#sheetBtn");
   if(!t) return;
   const d = t.dataset;
+  if(t.id==="blurBtn" || d.blur!==undefined){
+    setBlur(!blurOn()); render(); return;
+  }
   if(d.who){                                   // person chosen, on the gate or from Settings
     setMe(d.who);
     if(gateNext){ const n = gateNext; gateNext = null; n(); }
