@@ -268,15 +268,14 @@ const CHEV = '<svg class="chev" viewBox="0 0 24 24"><path d="m9.5 5.5 6.5 6.5-6.
 
 /* -------------------------------------------------------------- seed */
 const SEED = {
-  meta: { lastUpdated:"2026-08-08", startDate:"2025-09-30", schema:2,
-          auditSheet:"https://docs.google.com/spreadsheets/d/1FlfPcjJ3L1Mfqerbo4yLc39JvZfPrRwBQhizEXX3wiI/edit" },
+  meta: { lastUpdated:"2026-08-08", startDate:"2025-09-30", schema:2 },
   assumptions: {
     splitAle: 50,
     monthly: [
-      { key:"octopus", provider:"Octopus Energy",   paidBy:"Ale",   amount:0, payDay:1,  note:"Direct payment by Ale on the 1st. DD £117.80 less the £14.43 target-balance component." },
-      { key:"council", provider:"Council Tax",      paidBy:"Ale",   amount:0, payDay:15, note:"Paid on the 15th of each month." },
-      { key:"thames",  provider:"Thames Water",     paidBy:"Amira", amount:74.66,  payDay:28, note:"Latest recurring water amount." },
-      { key:"virgin",  provider:"Virgin Media",     paidBy:"Amira", amount:29.49,  payDay:12, note:"" }
+      { key:"octopus", provider:"Octopus Energy",   paidBy:"Ale",   amount:0, payDay:1,  note:"" },
+      { key:"council", provider:"Council Tax",      paidBy:"Ale",   amount:0, payDay:15, note:"" },
+      { key:"thames",  provider:"Thames Water",     paidBy:"Amira", amount:0,  payDay:28, note:"" },
+      { key:"virgin",  provider:"Virgin Media",     paidBy:"Amira", amount:0,  payDay:12, note:"" }
     ]
   },
   items: [
@@ -920,7 +919,7 @@ function vSettings(){
   <div class="grp">
     ${liNav("up","t-grey","Export a backup","Unencrypted file — keep it somewhere safe","",'id="exportBtn"')}
     ${liNav("down","t-grey","Import a backup","Replace with a shared file","",'id="importBtn"')}
-    ${liNav("doc","t-grey","Audit ledger","Google Sheet","",'id="sheetBtn"')}
+    ${state.meta.auditSheet ? liNav("doc","t-grey","Audit ledger","Google Sheet","",'id="sheetBtn"') : ""}
   </div>
   <input type="file" id="importFile" accept="application/json" hidden>
 
@@ -1092,7 +1091,7 @@ function vUpload(){
   </div>
   <div class="f">
     <label>Paste what the document says</label>
-    <textarea id="pasteText" placeholder="Virgin Media · 3 Aug – 2 Sep 2026 · £29.49 · due 12 Aug"></textarea>
+    <textarea id="pasteText" placeholder="Virgin Media · 3 Aug – 2 Sep 2026 · £24.99 · due 12 Aug"></textarea>
     <div class="h">Open the screenshot in Photos, press and hold the text, Select All, Copy — then tap Paste below. Without any text the file goes to Needs review.</div>
     <button class="btn" id="uPaste" style="margin-top:8px">Paste copied text</button>
   </div>
@@ -1348,7 +1347,7 @@ function formSheet(o){
         <span class="tx"><span class="t1">Autofill from pasted text</span><span class="t2">Reads the box below</span></span></button>
       <div class="info" id="attInfo" style="display:none"></div>
     </div>
-    <div class="f"><label>Text from the document</label><textarea id="attText" placeholder="Virgin Media · 3 Aug – 2 Sep 2026 · £29.49"></textarea></div>`:""}
+    <div class="f"><label>Text from the document</label><textarea id="attText" placeholder="Virgin Media · 3 Aug – 2 Sep 2026 · £24.99"></textarea></div>`:""}
     <div class="f"><label>Type</label><select id="f-type">${Object.keys(TYPE_LABEL).map(k=>
       `<option value="${k}" ${k===type?"selected":""}>${TYPE_LABEL[k]}</option>`).join("")}</select></div>
     <div class="f"><label>Provider or person</label>
@@ -1369,7 +1368,7 @@ function formSheet(o){
       <div class="f"><label>Period to</label><input type="date" id="f-pe" value="${esc(it.periodEnd||o.periodEnd||"")}"></div>
     </div>
     <div class="f"><label>Notes</label><textarea id="f-notes">${esc(it.notes||o.notes||"")}</textarea></div>
-    <div class="f"><label>Evidence</label><input id="f-source" value="${esc(it.source||o.source||"")}" placeholder="Revolut screenshot, 6 Aug"></div>
+    <div class="f"><label>Evidence</label><input id="f-source" value="${esc(it.source||o.source||"")}" placeholder="Bank transfer screenshot, 6 Aug"></div>
     <button class="btn pri" id="f-save" data-id="${it.id||""}" data-cid="${o.cid||""}">${isNew?"Add to tracker":"Save changes"}</button>
     <button class="btn qui" data-close>Cancel</button>`);
 
