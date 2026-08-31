@@ -64,11 +64,15 @@ header{position:sticky;top:0;z-index:40;background:#f2f2f7e6;backdrop-filter:sat
 .iconbtn.on{background:var(--blue);color:#fff}
 body.blurred .amt{filter:blur(6px);user-select:none}
 .segwrap{padding-bottom:12px}
-.seg{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;background:var(--fill);padding:2px;border-radius:9px}
+/* Columns are derived from the number of tabs rather than hardcoded, so adding or
+ * removing a section is a change to TABS alone. This was `repeat(6,1fr)`, which meant
+ * a new section had no slot without editing CSS in lockstep (TRACKER #10). */
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;background:var(--fill);padding:2px;border-radius:9px}
 .seg button{white-space:nowrap;font-size:13px;font-weight:500;color:var(--label);padding:6px 4px;border-radius:7px;
   transition:background .2s,box-shadow .2s;overflow:hidden;text-overflow:ellipsis;touch-action:manipulation}
 .seg button[aria-selected="true"]{background:#fff;font-weight:590;box-shadow:0 3px 8px #00000014,0 1px 1px #0000000f}
-@media(max-width:430px){ .seg button{font-size:11.5px;letter-spacing:-.02em;padding:6px 2px} }
+@media(max-width:430px){ .seg button{font-size:12.5px;letter-spacing:-.02em;padding:6px 3px} }
+@media(max-width:360px){ .seg button{font-size:11px;letter-spacing:-.03em;padding:6px 1px} }
 
 /* grouped lists */
 .grp{background:var(--card);border-radius:var(--r);overflow:hidden;margin-bottom:22px}
@@ -92,7 +96,7 @@ button.li:active{background:var(--fill)}
 /* tints */
 .t-blue{background:var(--blue)} .t-teal{background:var(--teal)}
 .t-grey{background:var(--grey)} .t-orange{background:var(--orange)}
-.t-purple{background:var(--purple)}
+.t-purple{background:var(--purple)} .t-green{background:var(--green)}
 
 /* badges */
 .bdg{font-size:11px;font-weight:590;padding:1px 6px;border-radius:5px;letter-spacing:0;color:var(--label-2);background:var(--fill-2)}
@@ -273,7 +277,10 @@ const ICON = {
   eye: S('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
   eyeOff: S('<path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M6.6 6.6C4 8.3 2 12 2 12s3.5 7 10 7c1.9 0 3.5-.5 4.9-1.2M17.4 17.4C19.4 16 21 12 21 12s-1-2-2.7-3.7"/>'),
   flame: S('<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'),
-  phone: S('<path d="M8 3.5h8a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1Z"/><path d="M11 18.5h2"/>')
+  phone: S('<path d="M8 3.5h8a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1Z"/><path d="M11 18.5h2"/>'),
+  back: S('<path d="M14.5 5.5 8 12l6.5 6.5"/>'),
+  bag:  S('<path d="M5 8h14l-1.1 11.2a1.8 1.8 0 0 1-1.8 1.6H7.9a1.8 1.8 0 0 1-1.8-1.6L5 8Z"/><path d="M9 8V6.2a3 3 0 0 1 6 0V8"/>'),
+  ring: S('<circle cx="12" cy="12" r="7.6"/>')
 };
 const CHEV = '<svg class="chev" viewBox="0 0 24 24"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></svg>';
 
@@ -296,7 +303,7 @@ const SEED = {
 
 /* ------------------------------------------------------------- state */
 let state = seedClone(), tab = "overview", billFilter = "all";
-let reviewQueue = [], showAll = { bills:false, payments:false };
+let reviewQueue = [], showAll = { bills:false, payments:false, shopping:false };
 
 function seedClone(){ const s = JSON.parse(JSON.stringify(SEED));
   s.deleted = {}; s.assumptionsUpdatedAt = "2026-08-08T00:00:00.000Z";
@@ -691,15 +698,31 @@ function fmtShort(iso){ if(!iso) return "—"; const d=new Date(iso+"T00:00:00")
 function ord(n){ if(!n) return ""; const s=["th","st","nd","rd"], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
-const STATUS_LABEL = { counted:"Counted", pending_review:"Pending", excluded:"Not included", duplicate:"Duplicate", needs_confirmation:"To confirm" };
-const TYPE_LABEL = { provider_bill:"Provider bill", housemate_payment:"Payment between us", pending:"Pending item", excluded:"Not included" };
+const STATUS_LABEL = { counted:"Counted", pending_review:"Pending", excluded:"Not included", duplicate:"Duplicate", needs_confirmation:"To confirm", needed:"Needed" };
+const TYPE_LABEL = { provider_bill:"Provider bill", housemate_payment:"Payment between us", pending:"Pending item", excluded:"Not included", shared_purchase:"Shopping" };
 const PROV = {
   "Octopus Energy":{ic:"bolt",t:"t-orange"}, "Council Tax":{ic:"bank",t:"t-blue"},
   "Thames Water":{ic:"drop",t:"t-teal"}, "Virgin Media":{ic:"wifi",t:"t-purple"},
   "Rent — Foxtons":{ic:"home",t:"t-grey"}, "House order":{ic:"box",t:"t-grey"}
 };
+/* Whether a shopping entry actually moves the balance. It is not enough to be counted
+ * and shared: the generic entry form also offers "Both" and "—" as payers, and neither
+ * leaves anybody owing anything. Without this, such an entry would be tallied in
+ * shopCount while contributing to neither side's total — lighting up two £0.00 rows on
+ * the Overview and making the item sheet claim it counts when it does not. */
+function shopSplits(it){
+  return it.type==="shared_purchase" && it.shared!==false
+      && (it.paidBy==="Ale" || it.paidBy==="Amira");
+}
+const splitPct = () => state.assumptions.splitAle||50;
+
 function art(it){
   if(it.type==="housemate_payment") return {ic:"send",t:"t-teal"};
+  /* Green only when it genuinely counts, matching how a non-counted bill drops to grey
+   * three lines below — otherwise an excluded or personal row reads as live money. */
+  if(it.type==="shared_purchase")
+    return { ic: it.status==="needed" ? "ring" : "bag",
+             t: (it.status==="counted" && shopSplits(it)) ? "t-green" : "t-grey" };
   const p = PROV[it.provider];
   if(p) return it.status==="counted" ? p : {ic:p.ic,t:"t-grey"};
   return {ic:"doc",t:"t-grey"};
@@ -710,16 +733,31 @@ function calc(){
   const c = state.items.filter(i=>i.status==="counted");
   const aleBills   = c.filter(i=>i.type==="provider_bill"&&i.paidBy==="Ale").reduce((s,i)=>s+(Number(i.amount)||0),0);
   const amiraBills = c.filter(i=>i.type==="provider_bill"&&i.paidBy==="Amira").reduce((s,i)=>s+(Number(i.amount)||0),0);
+  /* Shared shopping settles exactly like a bill: whoever paid is owed half by the other.
+   * `shared===false` marks a personal item — logged and visible, never split. A `needed`
+   * entry has no amount and no payer and is not in `c` at all, so it cannot reach here.
+   * Note `Number(i.amount) || 0`, not `Number(i.amount||0)` — see TRACKER #2. */
+  const shopBy = who => c.filter(i=>shopSplits(i)&&i.paidBy===who)
+                         .reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const aleShop = shopBy("Ale"), amiraShop = shopBy("Amira");
   const payments   = c.filter(i=>i.type==="housemate_payment").reduce((s,i)=>s+(i.paidBy==="Ale"?-(Number(i.amount)||0):(Number(i.amount)||0)),0);
   const share = (state.assumptions.splitAle||50)/100;
-  const expected = aleBills*share - amiraBills*share;
+  /* Written as two shares rather than one, so that with no shopping at all these are
+   * bit-for-bit the expressions that produced the documented opening position. */
+  const aleTotal = aleBills + aleShop, amiraTotal = amiraBills + amiraShop;
+  const expected = aleTotal*share - amiraTotal*share;
   return { aleBills:round2(aleBills), amiraBills:round2(amiraBills), payments:round2(payments),
-    diff:round2(aleBills-amiraBills), expected:round2(expected), balance:round2(expected-payments),
+    aleShop:round2(aleShop), amiraShop:round2(amiraShop),
+    diff:round2(aleTotal-amiraTotal), expected:round2(expected), balance:round2(expected-payments),
     countedCount:c.length,
     pendingCount:state.items.filter(i=>i.status==="pending_review"||i.status==="needs_confirmation").length,
     excludedCount:state.items.filter(i=>i.status==="excluded").length,
     dupCount:state.items.filter(i=>i.status==="duplicate").length,
-    payCount:c.filter(i=>i.type==="housemate_payment").length };
+    payCount:c.filter(i=>i.type==="housemate_payment").length,
+    /* Exactly the entries the two totals above are built from, so the count and the
+     * figures can never disagree. */
+    shopCount:c.filter(shopSplits).length,
+    neededCount:state.items.filter(i=>i.type==="shared_purchase"&&i.status==="needed").length };
 }
 function monthly(){
   const m = state.assumptions.monthly, share=(state.assumptions.splitAle||50)/100;
@@ -737,9 +775,13 @@ function words(b){
 /* ===================================================================== *
  *  Views
  * ===================================================================== */
+/* The strip carries the sections used day to day. Upload and Settings are still full
+ * views — they moved behind the header avatar's profile menu (TRACKER #10), and are
+ * reached by the same data-tab route, since render() resolves a view id independently
+ * of what the strip happens to display. */
 const TABS = [
   {id:"overview",label:"Overview"},{id:"bills",label:"Bills"},{id:"payments",label:"Payments"},
-  {id:"pending",label:"Pending"},{id:"upload",label:"Upload"},{id:"settings",label:"Settings"}
+  {id:"shopping",label:"Shopping"},{id:"pending",label:"Pending"}
 ];
 function render(){
   document.getElementById("upd").textContent = "Updated "+fmtShort(state.meta.lastUpdated);
@@ -755,7 +797,8 @@ function render(){
   document.getElementById("seg").innerHTML = TABS.map(t=>
     `<button role="tab" aria-selected="${t.id===tab}" data-tab="${t.id}">${t.label}</button>`).join("");
   const v = document.getElementById("view");
-  v.innerHTML = ({overview:vOverview,bills:vBills,payments:vPayments,pending:vPending,upload:vUpload,settings:vSettings})[tab]();
+  v.innerHTML = ({overview:vOverview,bills:vBills,payments:vPayments,shopping:vShopping,
+                  pending:vPending,upload:vUpload,settings:vSettings})[tab]();
   window.scrollTo({top:0});
   wireUpload();
 }
@@ -782,6 +825,13 @@ function liNav(icon,tint,title,sub,val,attr){
 function liAdd(label,attr){
   return `<button class="li ind action" ${attr}><span class="ic">${ICON.plus}</span>
     <span class="tx"><span class="t1">${label}</span></span></button>`;
+}
+/* Views reached from the profile menu are not in the tab strip, so no segmented button
+ * is selected while they are open. This is their way back (TRACKER #10). */
+function liBack(){
+  return `<div class="grp"><button class="li ind action" data-tab="overview">
+    <span class="ic">${ICON.back}</span>
+    <span class="tx"><span class="t1">Overview</span></span></button></div>`;
 }
 function history(list,key,addLabel,addAttr){
   const sorted = list.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
@@ -810,6 +860,8 @@ function vOverview(){
   <div class="grp">
     ${liNav("bolt","t-blue","Bills Ale paid","Octopus · Council tax",gbp(c.aleBills),'data-explain="ale"')}
     ${liNav("drop","t-teal","Bills Amira paid","Thames Water · Virgin Media",gbp(c.amiraBills),'data-explain="amira"')}
+    ${c.shopCount?liNav("bag","t-green","Shopping Ale paid",esc("Shared purchases"),gbp(c.aleShop),'data-explain="aleShop"'):""}
+    ${c.shopCount?liNav("bag","t-green","Shopping Amira paid",esc("Shared purchases"),gbp(c.amiraShop),'data-explain="amiraShop"'):""}
     ${liNav("send","t-teal","Transfers Amira sent Ale",c.payCount+" payments",gbp(c.payments),'data-explain="payments"')}
   </div>
 
@@ -828,6 +880,7 @@ function vOverview(){
   </div>
 
   <div class="grp">
+    ${c.neededCount?liNav("ring","t-green","Shopping list",c.neededCount===1?"1 item needed":c.neededCount+" items needed","",'data-tab="shopping"'):""}
     ${liNav("doc","t-grey","Pending and not included",c.pendingCount+" pending · "+(c.excludedCount+c.dupCount)+" excluded","",'data-tab="pending"')}
   </div>`;
 }
@@ -874,6 +927,60 @@ function vPayments(){
   ${history(list,"payments","Add a payment",'data-add="housemate_payment"')}`;
 }
 
+/* ---------------------------------------------------------- shopping */
+/* An item someone has flagged but nobody has bought yet: no amount, no payer, and
+ * deliberately no money column — there is nothing true to put in it. */
+function liNeeded(it){
+  return `<button class="li ind" data-item="${it.id}">
+    <span class="ic t-grey">${ICON.ring}</span>
+    <span class="tx"><span class="t1">${esc(it.provider)}</span>
+    <span class="t2">${it.requestedBy?esc(it.requestedBy)+" · ":""}${fmtDate(it.date)}</span></span>
+    ${CHEV}</button>`;
+}
+function liShop(it){
+  const personal = it.shared===false, a = art(it);
+  const flag = personal ? ` <span class="bdg">Personal</span>` : "";
+  const bdg = (it.status!=="counted"&&it.status!=="needed")
+    ? ` <span class="bdg ${it.status}">${STATUS_LABEL[it.status]}</span>` : "";
+  return `<button class="li ind" data-item="${it.id}">
+    <span class="ic ${a.t}">${ICON[a.ic]}</span>
+    <span class="tx"><span class="t1">${esc(it.provider)}${flag}${bdg}</span>
+    <span class="t2">${fmtDate(it.date)}${it.paidBy?" · "+esc(it.paidBy):""}</span></span>
+    <span class="val"><b>${it.amount?gbp(it.amount):"—"}</b></span>${CHEV}</button>`;
+}
+function vShopping(){
+  const c = calc();
+  const all = state.items.filter(i=>i.type==="shared_purchase");
+  /* Oldest request first — the thing that has been waiting longest is the thing to buy. */
+  const need = all.filter(i=>i.status==="needed").sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  const done = all.filter(i=>i.status!=="needed").sort(byDate);
+  const open = showAll.shopping, shown = open ? done : done.slice(0,5);
+  const split = splitPct();
+  return `
+  <div class="big">
+    <div class="n">${gbp(c.aleShop + c.amiraShop)}</div>
+    <div class="c">Shared shopping counted · ${c.shopCount} ${c.shopCount===1?"purchase":"purchases"}</div>
+  </div>
+
+  <div class="ghead">Needed${need.length?" · "+need.length:""}</div>
+  <div class="grp">
+    ${need.length?need.map(liNeeded).join(""):`<div class="empty">Nothing on the list.</div>`}
+    ${liAdd("Add something we need",'data-add="needed"')}
+  </div>
+  <p class="gfoot">Either of you can add to this. Nothing here changes the balance until
+  someone marks it bought and puts a figure on it.</p>
+
+  <div class="ghead">Purchases</div>
+  <div class="grp">
+    ${shown.length?shown.map(liShop).join(""):`<div class="empty">Nothing bought yet.</div>`}
+    ${done.length>5?`<button class="li ind action" data-showall="shopping"><span class="ic">${open?ICON.up:ICON.down}</span>
+      <span class="tx"><span class="t1">${open?"Show less":"View full history ("+done.length+")"}</span></span></button>`:""}
+    ${liAdd("Log a purchase",'data-add="shared_purchase"')}
+  </div>
+  <p class="foot">Shared purchases split ${split}/${100-split}, the same as bills.
+  Personal ones are logged but never split.</p>`;
+}
+
 /* ----------------------------------------------------------- pending */
 function vPending(){
   const pend = state.items.filter(i=>i.status==="pending_review"||i.status==="needs_confirmation").sort(byDate);
@@ -903,6 +1010,7 @@ function byDate(a,b){ return (b.date||"").localeCompare(a.date||""); }
 function vSettings(){
   const m = monthly(), a = readAuth()||{}, bioOn = !!a.credId, sc = syncCfg(), bioWhy = window.__bioWhy||"";
   return `
+  ${liBack()}
   <div class="ghead">Split</div>
   <div class="grp">
     <div class="li ind"><span class="ic t-grey">${ICON.gear}</span>
@@ -1123,6 +1231,7 @@ const VERDICT = {
 function vUpload(){
   const hist = (state.uploads||[]).slice().reverse().slice(0,20);
   return `
+  ${liBack()}
   <div class="drop" id="drop">${ICON.doc}
     <div class="d1">Drop a file, or tap to choose</div>
     <div class="d2">Bills, PDFs, screenshots, payment confirmations</div>
@@ -1258,19 +1367,25 @@ let tt; function toast(m){ const t=document.getElementById("toast"); t.textConte
 
 function explainSheet(which){
   const c = calc(), counted = state.items.filter(i=>i.status==="counted");
+  const shopped = counted.filter(shopSplits);
+  const split = splitPct();
   const grp = arr => arr.length?`<div class="grp">${arr.sort(byDate).map(i=>liItem(i)).join("")}</div>`:`<div class="grp"><div class="empty">Nothing yet.</div></div>`;
   const kvs = rows => `<div class="grp" style="padding:4px 16px">${rows.map(r=>
     `<div class="kv"><span class="k">${r[0]}</span><span class="v">${r[1]}</span></div>`).join("")}</div>`;
   const M = {
     ale:["Bills Ale paid", gbp(c.aleBills)+" counted", grp(counted.filter(i=>i.type==="provider_bill"&&i.paidBy==="Ale"))],
     amira:["Bills Amira paid", gbp(c.amiraBills)+" counted", grp(counted.filter(i=>i.type==="provider_bill"&&i.paidBy==="Amira"))],
+    aleShop:["Shopping Ale paid", gbp(c.aleShop)+" counted", grp(shopped.filter(i=>i.paidBy==="Ale"))],
+    amiraShop:["Shopping Amira paid", gbp(c.amiraShop)+" counted", grp(shopped.filter(i=>i.paidBy==="Amira"))],
     payments:["Transfers to Ale", gbp(c.payments)+" across "+c.payCount+" payments", grp(counted.filter(i=>i.type==="housemate_payment"))],
-    balance:["How this works","Shared bills are split 50/50, then transfers are netted off.",
-      kvs([["Bills Ale paid",gbp(c.aleBills)],["Less bills Amira paid","− "+gbp(c.amiraBills)],
-           ["Difference",gbpS(c.diff)],["Split in half",gbpS(c.expected)],
+    balance:["How this works","Shared bills and shopping are split "+split+"/"+(100-split)+", then transfers are netted off.",
+      kvs([["Bills Ale paid",gbp(c.aleBills)],["Less bills Amira paid","− "+gbp(c.amiraBills)]]
+          .concat(c.shopCount?[["Shopping Ale paid",gbp(c.aleShop)],["Less shopping Amira paid","− "+gbp(c.amiraShop)]]:[])
+          .concat([["Difference",gbpS(c.diff)],["Split "+split+"/"+(100-split),gbpS(c.expected)],
            ["Less transfers already sent","− "+gbp(c.payments)],
-           ["<b>"+words(c.balance).dir+"</b>","<b>"+gbp(c.balance)+"</b>"]])
-      +`<p class="gfoot">Rent sits outside this — each person pays Foxtons directly.</p>`]
+           ["<b>"+words(c.balance).dir+"</b>","<b>"+gbp(c.balance)+"</b>"]]))
+      +`<p class="gfoot">Rent sits outside this — each person pays Foxtons directly.
+        Personal shopping is logged but never split.</p>`]
   }[which];
   if(!M) return;
   openSheet(`<h3>${M[0]}</h3><p class="lead">${M[1]}</p>${M[2]}<button class="btn qui" data-close>Done</button>`);
@@ -1288,24 +1403,34 @@ function itemSheet(id){
   const it = state.items.find(x=>x.id===id); if(!it) return;
   const dir = it.type==="housemate_payment" ? (it.paidBy==="Ale"?"Ale → Amira":"Amira → Ale") : it.paidBy;
   const kv = (k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+  const isShop = it.type==="shared_purchase";
+  /* "Counted" alone is not enough to answer this for shopping: a personal purchase is a
+   * confirmed record that deliberately does not split. Saying "Yes" here would be a
+   * money-clarity bug (TRACKER #11). */
+  const counts = it.status==="counted" && (isShop ? shopSplits(it) : true);
   openSheet(`<h3>${esc(it.provider)}</h3>
-    <p class="lead">${TYPE_LABEL[it.type]||it.type} · ${STATUS_LABEL[it.status]}</p>
+    <p class="lead">${TYPE_LABEL[it.type]||it.type} · ${STATUS_LABEL[it.status]||it.status}</p>
     <div class="grp" style="padding:4px 16px">
       ${kv("Amount", it.amount?gbp(it.amount):"—")}
       ${kv("Date", fmtDate(it.date))}
       ${it.periodStart?kv("Period", fmtShort(it.periodStart)+" – "+fmtShort(it.periodEnd)):""}
-      ${kv(it.type==="housemate_payment"?"Direction":"Paid by", esc(dir||"—"))}
-      ${kv("Counts in balance", it.status==="counted"?"Yes":"No")}
+      ${it.status==="needed"?"":kv(it.type==="housemate_payment"?"Direction":"Paid by", esc(dir||"—"))}
+      ${isShop?kv("Split", it.shared===false?"Personal":"Shared"):""}
+      ${kv("Counts in balance", counts?"Yes":"No")}
+      ${it.requestedBy?kv("Asked for by", esc(it.requestedBy)):""}
       ${it.coveredThrough?kv("Covers up to", fmtDate(it.coveredThrough)):""}
       ${kv("Last updated", fmtDate((it.updatedAt||state.meta.lastUpdated).slice(0,10)))}
       ${it.by?kv("Added by", esc(it.by)):""}
     </div>
     ${it.notes?`<p class="gfoot">${esc(it.notes)}</p>`:""}
     ${it.source?`<div class="ghead">Evidence</div><div class="grp" style="padding:12px 16px"><div style="font-size:14px;color:var(--label-2)">${esc(it.source)}</div></div>`:""}
-    <button class="btn pri" data-edit="${it.id}">Edit</button>
-    ${it.status!=="counted"
+    ${isShop && it.status==="needed"
+      ? `<button class="btn pri" data-bought="${it.id}">Mark as bought</button>
+         <button class="btn" data-edit="${it.id}">Edit</button>`
+      : `<button class="btn pri" data-edit="${it.id}">Edit</button>`}
+    ${isShop && it.status==="needed" ? "" : (it.status!=="counted"
       ? `<button class="btn" data-status="counted" data-sid="${it.id}">Mark as counted</button>`
-      : `<button class="btn" data-status="pending_review" data-sid="${it.id}">Move to pending</button>`}
+      : `<button class="btn" data-status="pending_review" data-sid="${it.id}">Move to pending</button>`)}
     ${it.status!=="excluded"?`<button class="btn" data-status="excluded" data-sid="${it.id}">Do not include</button>`:""}
     <button class="btn des" data-del="${it.id}">Delete</button>
     <button class="btn qui" data-close>Cancel</button>`);
@@ -1329,6 +1454,27 @@ function tile(ic,tint,label,attr,wide){
   return `<button class="tile${wide?" wide":""}" ${attr}>
     <span class="sq ${tint}">${ICON[ic]}</span><span class="lb">${label}</span></button>`;
 }
+/* ------------------------------------------------- profile menu */
+/* The header avatar used to switch person directly. It now opens a menu holding the two
+ * views that left the tab strip plus that switch, so the strip keeps only the sections
+ * used day to day (TRACKER #10). */
+function whoSheet(){
+  openSheet(`<h3>Who is using this?</h3><p class="lead">Sets the defaults and records who added what.</p>
+    <div class="tiles">${tile("home","s-blue","Ale",'data-who="Ale"')}${tile("home","s-teal","Amira",'data-who="Amira"')}</div>
+    <button class="btn qui" style="margin-top:18px" data-close>Cancel</button>`);
+}
+function menuSheet(){
+  const who = me();
+  openSheet(`<h3>${who?esc(who):"Household"}</h3>
+    <p class="lead">${who?"Signed in on this device.":"No one is chosen on this device yet."}</p>
+    <div class="grp">
+      ${liNav("doc","t-grey","Upload","Bills, receipts and screenshots","",'data-tab="upload"')}
+      ${liNav("gear","t-grey","Settings","Split, sync and security","",'data-tab="settings"')}
+      ${liNav("home",who==="Amira"?"t-teal":"t-blue","Switch user",who?"Currently "+esc(who):"Choose who is using this","",'data-menu="switch"')}
+    </div>
+    <button class="btn qui" data-close>Cancel</button>`);
+}
+
 function pickerSheet(kind){
   if(kind==="housemate_payment"){
     return openSheet(`<h3>Who sent it?</h3><p class="lead">Payments between the two of you.</p>
@@ -1348,6 +1494,63 @@ function pickerSheet(kind){
     <button class="btn qui" style="margin-top:18px" data-close>Cancel</button>`);
 }
 
+/* -------------------------------------------------------- shopping */
+/* Stage one: a name and nothing else. Asking for an amount here would be asking someone
+ * to invent one — they have not bought it yet (TRACKER #11). */
+function neededSheet(){
+  openSheet(`<h3>Add something we need</h3>
+    <p class="lead">Just the name. Whoever buys it fills in the rest.</p>
+    <div class="f"><label>Item</label>
+      <input id="n-name" placeholder="Washing up liquid" autocapitalize="sentences" autocorrect="off"></div>
+    <button class="btn pri" id="n-save">Add to the list</button>
+    <button class="btn qui" data-close>Cancel</button>`);
+  const el = document.getElementById("n-name");
+  if(el) el.focus();
+  document.getElementById("n-save").onclick = () => {
+    const name = ((el||{}).value||"").trim();
+    if(!name){ toast("Give it a name first."); return; }
+    state.items.push({ id:uid("g"), type:"shared_purchase", provider:name, status:"needed",
+      shared:true, amount:0, date:todayISO(), paidBy:"", requestedBy:me()||"", by:me()||"",
+      notes:"", source:"", updatedAt:nowISO() });
+    save(); closeSheet(); render(); toast("Added to the list.");
+  };
+}
+
+/* Stage two: the point where it starts counting, so the amount is required and the
+ * shared/personal choice is explicit rather than buried in an edit form. */
+function boughtSheet(id){
+  const it = state.items.find(x=>x.id===id); if(!it) return;
+  const split = splitPct();
+  openSheet(`<h3>${esc(it.provider)}</h3>
+    <p class="lead">Who paid and how much. This is what makes it count.</p>
+    <div class="two">
+      <div class="f"><label>Amount</label>
+        <input type="number" step="0.01" min="0" inputmode="decimal" id="b-amt" placeholder="0.00"></div>
+      <div class="f"><label>Date</label><input type="date" id="b-date" value="${todayISO()}"></div>
+    </div>
+    <div class="f"><label>Paid by</label><select id="b-by">${["Ale","Amira"].map(p=>
+      `<option ${((me()||"Ale")===p)?"selected":""}>${p}</option>`).join("")}</select></div>
+    <div class="f"><label>Split</label><select id="b-shared">
+      <option value="shared">Shared — splits ${split}/${100-split}</option>
+      <option value="personal">Personal — does not affect the balance</option></select></div>
+    <div class="f"><label>Evidence</label>
+      <input id="b-src" placeholder="Receipt photo, ${fmtShort(todayISO())}">
+      <div class="h">Optional. Without one the amount rests on trust, same as adding a bill.</div></div>
+    <button class="btn pri" id="b-save">Mark as bought</button>
+    <button class="btn qui" data-close>Cancel</button>`);
+  document.getElementById("b-save").onclick = () => {
+    const g = i => (document.getElementById(i)||{}).value;
+    const amt = round2(Number(g("b-amt"))||0);
+    if(!(amt>0)){ toast("Put the amount in first."); return; }
+    const when = g("b-date")||todayISO();
+    Object.assign(it, { status:"counted", amount:amt, date:when, boughtOn:when,
+      paidBy:g("b-by"), shared:g("b-shared")!=="personal",
+      source:g("b-src")||it.source||"", by:me()||"", updatedAt:nowISO() });
+    save(); closeSheet(); render();
+    toast(it.shared ? "Bought. Balance updated." : "Bought. Logged as personal.");
+  };
+}
+
 /* ----------------------------------------------------- entry form */
 let attached = null;   // candidate built from a file attached inside the form
 
@@ -1359,8 +1562,12 @@ function fillFromCandidate(c){
   if(c.periodStart && c.periodEnd && c.periodStart!==c.periodEnd){ set("f-ps",c.periodStart); set("f-pe",c.periodEnd); filled.push("billing period"); }
   const pv = document.getElementById("f-provider");
   if(pv && !pv.value && c.provider){ pv.value = c.provider; filled.push("provider"); }
+  /* A payer read off the document wins over the signed-in default (TRACKER #10): the
+   * field is now pre-filled with this device's person, so the old "only fill if still —"
+   * guard would have silently discarded what the document actually said. It is announced
+   * in the filled list below rather than changed quietly. */
   const pb = document.getElementById("f-paidby");
-  if(pb && c.paidBy && (pb.value==="—"||!pb.value)) pb.value = c.paidBy;
+  if(pb && c.paidBy && pb.value !== c.paidBy){ pb.value = c.paidBy; filled.push("paid by"); }
   const src = document.getElementById("f-source");
   if(src) src.value = c.fileName + (c.reference?" · ref "+c.reference:"");
 
@@ -1383,6 +1590,10 @@ function formSheet(o){
    * no hardcoded household-specific names. Naturally empty for a brand-new ledger with
    * no items yet; the field stays plain free text either way. */
   const provs = [...new Set(state.items.map(i=>i.provider).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  /* An entry with no payer yet — a needed shopping item — matches none of the options,
+   * and a select with nothing selected silently reports its first one. Falling back to
+   * "—" keeps "nobody has said yet" from being saved as "Ale". */
+  const paidBy0 = it.paidBy||o.paidBy||"—";
   attached = null;
   openSheet(`<h3>${isNew?"Add":"Edit"} ${esc(o.provider||it.provider||"entry")}</h3>
     <p class="lead">Nothing saves until you tap save.</p>
@@ -1407,10 +1618,15 @@ function formSheet(o){
     </div>
     <div class="two">
       <div class="f"><label>Paid by</label><select id="f-paidby">${["Ale","Amira","Both","—"].map(p=>
-        `<option ${((it.paidBy||o.paidBy)===p)?"selected":""}>${p}</option>`).join("")}</select></div>
-      <div class="f"><label>Status</label><select id="f-status">${Object.keys(STATUS_LABEL).map(k=>
+        `<option ${(paidBy0===p)?"selected":""}>${p}</option>`).join("")}</select></div>
+      <div class="f"><label>Status</label><select id="f-status">${Object.keys(STATUS_LABEL)
+        .filter(k=>k!=="needed"||type==="shared_purchase").map(k=>
         `<option value="${k}" ${((it.status||o.status||"counted")===k)?"selected":""}>${STATUS_LABEL[k]}</option>`).join("")}</select></div>
     </div>
+    ${type==="shared_purchase"?`<div class="f"><label>Split</label><select id="f-shared">
+      <option value="shared" ${it.shared!==false?"selected":""}>Shared — splits with the household</option>
+      <option value="personal" ${it.shared===false?"selected":""}>Personal — does not affect the balance</option>
+    </select></div>`:""}
     <div class="two">
       <div class="f"><label>Period from</label><input type="date" id="f-ps" value="${esc(it.periodStart||o.periodStart||"")}"></div>
       <div class="f"><label>Period to</label><input type="date" id="f-pe" value="${esc(it.periodEnd||o.periodEnd||"")}"></div>
@@ -1469,6 +1685,9 @@ function formSheet(o){
     const patch = { type:g("f-type"), provider, date:g("f-date")||todayISO(), amount:round2(Number(g("f-amount"))||0),
       paidBy:g("f-paidby"), status:g("f-status"), periodStart:g("f-ps")||"", periodEnd:g("f-pe")||"",
       notes:g("f-notes")||"", source:g("f-source")||"", updatedAt:nowISO(), by:me()||"" };
+    /* Only present for shopping. Absent means shared, which is the safe default and
+     * matches how an entry written before this field existed is read. */
+    if(document.getElementById("f-shared")) patch.shared = g("f-shared")!=="personal";
     const id = e.currentTarget.dataset.id, cid = e.currentTarget.dataset.cid;
     if(id){ Object.assign(state.items.find(x=>x.id===id), patch); toast("Updated. Balance recalculated."); }
     else {
@@ -1585,7 +1804,7 @@ async function securityAction(what){
 
 /* ------------------------------------------------------------ events */
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-tab],[data-explain],[data-item],[data-prov],[data-filter],[data-add],[data-pick],[data-close],[data-edit],[data-status],[data-del],[data-act],[data-showall],[data-assume],[data-sec],[data-sync],[data-who],[data-blur],#whoBtn,#blurBtn,#exportBtn,#importBtn,#resetBtn,#sheetBtn");
+  const t = e.target.closest("[data-tab],[data-explain],[data-item],[data-prov],[data-filter],[data-add],[data-pick],[data-close],[data-edit],[data-status],[data-del],[data-act],[data-showall],[data-assume],[data-sec],[data-sync],[data-who],[data-blur],[data-menu],[data-bought],#whoBtn,#blurBtn,#exportBtn,#importBtn,#resetBtn,#sheetBtn");
   if(!t) return;
   const d = t.dataset;
   if(t.id==="blurBtn" || d.blur!==undefined){
@@ -1597,12 +1816,8 @@ document.addEventListener("click", e => {
     else { closeSheet(); render(); toast("Now using this as "+d.who+"."); }
     return;
   }
-  if(t.id==="whoBtn" || d.sec==="who"){
-    openSheet(`<h3>Who is using this?</h3><p class="lead">Sets the defaults and records who added what.</p>
-      <div class="tiles">${tile("home","s-blue","Ale",'data-who="Ale"')}${tile("home","s-teal","Amira",'data-who="Amira"')}</div>
-      <button class="btn qui" style="margin-top:18px" data-close>Cancel</button>`);
-    return;
-  }
+  if(t.id==="whoBtn"){ menuSheet(); return; }
+  if(d.sec==="who" || d.menu==="switch"){ whoSheet(); return; }
   if(d.sec){ securityAction(d.sec); return; }
   if(d.sync){
     if(d.sync==="setup") syncSheet();
@@ -1622,13 +1837,22 @@ document.addEventListener("click", e => {
     state = seedClone(); reviewQueue=[]; save(false); render(); toast("Reset to the baseline."); return;
   }
   if(d.showall!==undefined && t.hasAttribute("data-showall")){ showAll[d.showall]=!showAll[d.showall]; render(); return; }
-  if(d.tab){ tab=d.tab; render(); return; }
+  /* closeSheet is a no-op when nothing is open, and is needed when the tab was chosen
+   * from inside the profile menu rather than the strip. */
+  if(d.tab){ tab=d.tab; closeSheet(); render(); return; }
   if(d.filter){ billFilter=d.filter; render(); return; }
   if(d.explain){ explainSheet(d.explain); return; }
   if(d.prov){ provSheet(d.prov); return; }
   if(d.assume!==undefined && t.hasAttribute("data-assume")){ assumeSheet(Number(d.assume)); return; }
   if(d.item){ itemSheet(d.item); return; }
-  if(t.hasAttribute("data-add")){ pickerSheet(d.add); return; }
+  if(t.hasAttribute("data-add")){
+    /* Shopping skips the category tiles: groceries are named, not categorised. */
+    if(d.add==="needed") return neededSheet();
+    if(d.add==="shared_purchase")
+      return formSheet({ type:"shared_purchase", status:"counted", paidBy:me()||"—", date:todayISO() });
+    pickerSheet(d.add); return;
+  }
+  if(d.bought){ boughtSheet(d.bought); return; }
   if(t.hasAttribute("data-pick")){
     const i = d.pick.indexOf(":"), kind = d.pick.slice(0,i), provider = d.pick.slice(i+1);
     if(kind==="pay"){
@@ -1636,9 +1860,12 @@ document.addEventListener("click", e => {
         provider: provider==="Amira" ? "Amira → Ale" : "Ale → Amira", paidBy: provider });
       return;
     }
-    const cat = CATS.find(c=>c.label===provider);
+    /* Paid by defaults to whoever is signed in on this device, editable in the form like
+     * any other field (TRACKER #10). This is not the per-category payer guess TRACKER #9
+     * removed: that inferred a payer from the category ("water is Amira's"), which does
+     * not generalise. This reads the device's own identity, which is a fact. */
     const def = { provider_bill:{status:"counted"}, pending:{status:"pending_review"}, excluded:{status:"excluded"} };
-    formSheet(Object.assign({ type:kind, provider, paidBy: (cat&&cat.paidBy)||"—" }, def[kind]||{}));
+    formSheet(Object.assign({ type:kind, provider, paidBy: me()||"—" }, def[kind]||{}));
     return;
   }
   if(t.hasAttribute("data-close")){ closeSheet(); return; }
